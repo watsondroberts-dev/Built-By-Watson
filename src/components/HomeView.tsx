@@ -42,7 +42,7 @@ export default function HomeView({ setTab }: HomeViewProps) {
 
         {/* Content Container */}
         <div className="relative z-10 max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop w-full text-white">
-          <div className="max-w-3xl">
+          <div className="max-w-4xl">
             <motion.p
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
@@ -55,10 +55,11 @@ export default function HomeView({ setTab }: HomeViewProps) {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.1 }}
-              className="font-display-lg text-[40px] md:text-[56px] leading-[1.08] font-bold tracking-tight mb-6"
+              className="text-[28px] min-[420px]:text-[34px] sm:text-[44px] md:text-[54px] lg:text-[60px] leading-[1.1] font-semibold text-white tracking-[-0.02em] max-w-4xl mb-5 sm:mb-6"
             >
-              Built By Watson <br />
-              <span className="text-[#ffffff] font-semibold opacity-95">Google Ads Management</span>
+              Built By Watson
+              <br />
+              <span className="whitespace-nowrap">Google Ads Management</span>
             </motion.h1>
             <motion.p
               initial={{ opacity: 0, y: 20 }}
@@ -66,7 +67,7 @@ export default function HomeView({ setTab }: HomeViewProps) {
               transition={{ duration: 0.6, delay: 0.2 }}
               className="text-body-lg font-body-lg text-primary-fixed-dim max-w-xl mb-10 leading-relaxed"
             >
-              We engineer hyper-targeted, high-converting Google Ads campaigns for home service companies.
+              We engineer hyper-targeted, high-converting Google Ads campaigns for home service contractors and local businesses looking to scale predictably.
             </motion.p>
             
             <motion.div

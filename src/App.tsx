@@ -3,16 +3,51 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import TopNavBar from './components/TopNavBar';
 import Footer from './components/Footer';
 import HomeView from './components/HomeView';
 import AboutView from './components/AboutView';
 import ContactView from './components/ContactView';
+import { updatePageSeo } from './seo';
 
 export default function App() {
-  const [currentTab, setCurrentTab] = useState<'home' | 'about' | 'contact'>('home');
+  const [currentTab, setCurrentTab] = useState<'home' | 'about' | 'contact'>(() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash.toLowerCase();
+      if (hash === '#about') return 'about';
+      if (hash === '#contact') return 'contact';
+    }
+    return 'home';
+  });
+
+  // Keep SEO Title, Meta Descriptions, and Canonical links synchronized dynamically
+  useEffect(() => {
+    updatePageSeo(currentTab);
+    
+    // Update hash for deep linking without reload
+    const targetHash = currentTab === 'home' ? '' : `#${currentTab}`;
+    if (window.location.hash !== targetHash) {
+      const newUrl = targetHash 
+        ? `${window.location.pathname}${window.location.search}${targetHash}`
+        : `${window.location.pathname}${window.location.search}`;
+      window.history.replaceState(null, '', newUrl);
+    }
+  }, [currentTab]);
+
+  // Listen to browser back/forward or external anchor clicks
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.toLowerCase();
+      if (hash === '#about') setCurrentTab('about');
+      else if (hash === '#contact') setCurrentTab('contact');
+      else if (hash === '' || hash === '#home') setCurrentTab('home');
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   const renderActiveView = () => {
     switch (currentTab) {

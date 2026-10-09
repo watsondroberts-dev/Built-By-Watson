@@ -14,15 +14,13 @@ export default function Footer({ setTab }: FooterProps) {
   return (
     <footer className="bg-on-primary-fixed border-t border-outline-variant/30 py-12 text-surface-container-lowest" id="app-footer">
       <div className="flex flex-col md:flex-row justify-between items-center px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto gap-8">
-        <div className="flex flex-col items-center md:items-start gap-1">
-          <button
-            onClick={() => handleLinkClick('home')}
-            className="text-label-md font-label-md font-bold text-surface-container-lowest uppercase tracking-widest bg-transparent border-none p-0 cursor-pointer hover:opacity-80 transition-opacity"
-            id="footer-logo"
-          >
-            Built By Watson
-          </button>
-        </div>
+        <button
+          onClick={() => handleLinkClick('home')}
+          className="text-label-md font-label-md font-bold text-surface-container-lowest uppercase tracking-widest bg-transparent border-none p-0 cursor-pointer hover:opacity-80 transition-opacity"
+          id="footer-logo"
+        >
+          Built By Watson
+        </button>
 
         {/* Footer Navigation */}
         <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-10">
