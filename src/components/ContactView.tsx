@@ -26,10 +26,11 @@ const DEFAULT_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbwsSqvWMwq5
 export default function ContactView() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [message, setMessage] = useState('');
   
   // Validation states
-  const [errors, setErrors] = useState<{ fullName?: string; email?: string; message?: string }>({});
+  const [errors, setErrors] = useState<{ fullName?: string; email?: string; phone?: string; message?: string }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
@@ -107,6 +108,7 @@ export default function ContactView() {
             await appendLeadToWebhook(webhookUrl, {
               fullName: lead.fullName,
               email: lead.email,
+              phone: lead.phone || '',
               message: lead.message,
               submittedAt: lead.submittedAt ? new Date(lead.submittedAt).toLocaleString() : undefined
             });
@@ -116,6 +118,7 @@ export default function ContactView() {
             await appendLeadToSheet(googleToken, selectedSheetId, {
               fullName: lead.fullName,
               email: lead.email,
+              phone: lead.phone || '',
               message: lead.message,
               submittedAt: lead.submittedAt ? new Date(lead.submittedAt).toLocaleString() : undefined
             });
@@ -311,6 +314,7 @@ export default function ContactView() {
       await appendLeadToSheet(googleToken, selectedSheetId, {
         fullName: "Test Lead User",
         email: "test@builtbywatson.com",
+        phone: "(555) 234-5678",
         message: "This is a verification test lead to verify your Google Sheet is fully linked and active!"
       });
       setLastSyncedLead("Test lead successfully appended!");
@@ -345,6 +349,14 @@ export default function ContactView() {
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       newErrors.email = 'Please provide a valid email address';
     }
+    if (!phone.trim()) {
+      newErrors.phone = 'Phone number is required';
+    } else {
+      const digitsOnly = phone.replace(/\D/g, '');
+      if (digitsOnly.length < 7) {
+        newErrors.phone = 'Please provide a valid phone number (at least 7 digits)';
+      }
+    }
     if (!message.trim()) {
       newErrors.message = 'A message detailing your project is required';
     } else if (message.length < 10) {
@@ -373,6 +385,7 @@ export default function ContactView() {
           body: JSON.stringify({
             name: fullName.trim(),
             email: email.trim(),
+            phone: phone.trim(),
             message: message.trim()
           })
         });
@@ -390,6 +403,7 @@ export default function ContactView() {
             access_key: integrationKey.trim(),
             name: fullName.trim(),
             email: email.trim(),
+            phone: phone.trim(),
             message: message.trim(),
             subject: 'New Project Inquiry — Built By Watson',
             from_name: 'Watson Website Portfolio'
@@ -420,6 +434,7 @@ export default function ContactView() {
       id: 'inq_' + Math.random().toString(36).substring(2, 11),
       fullName: fullName.trim(),
       email: email.trim(),
+      phone: phone.trim(),
       message: message.trim(),
       submittedAt: submissionTime,
       status: provider !== 'local' && integrationKey.trim() ? 'reviewed' : 'pending'
@@ -431,6 +446,7 @@ export default function ContactView() {
     const leadPayload = {
       fullName: fullName.trim(),
       email: email.trim(),
+      phone: phone.trim(),
       message: message.trim(),
       submittedAt: submissionTime
     };
@@ -505,6 +521,7 @@ export default function ContactView() {
     // Reset form fields
     setFullName('');
     setEmail('');
+    setPhone('');
     setMessage('');
     setErrors({});
   };
@@ -620,6 +637,7 @@ export default function ContactView() {
                               await appendLeadToWebhook(webhookUrl, {
                                 fullName: inquiry.fullName,
                                 email: inquiry.email,
+                                phone: inquiry.phone || '',
                                 message: inquiry.message,
                                 submittedAt: inquiry.submittedAt ? new Date(inquiry.submittedAt).toLocaleString() : undefined
                               });
@@ -629,6 +647,7 @@ export default function ContactView() {
                               await appendLeadToSheet(googleToken, selectedSheetId, {
                                 fullName: inquiry.fullName,
                                 email: inquiry.email,
+                                phone: inquiry.phone || '',
                                 message: inquiry.message,
                                 submittedAt: inquiry.submittedAt ? new Date(inquiry.submittedAt).toLocaleString() : undefined
                               });
@@ -853,7 +872,7 @@ export default function ContactView() {
                     {showWebhookGuide && (
                       <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-[11px] text-slate-700 space-y-2.5 font-sans">
                         <div className="flex items-center justify-between">
-                          <p className="font-bold text-slate-900 text-xs">Connect your Google Sheet in 30 seconds:</p>
+                          <p className="font-bold text-slate-900 text-xs">Connect your Google Sheet &amp; Email Alert in 30 seconds:</p>
                           <button
                             type="button"
                             onClick={() => {
@@ -862,13 +881,36 @@ export default function ContactView() {
     var contents = e.postData ? e.postData.contents : "";
     var data = typeof contents === "string" ? JSON.parse(contents) : contents;
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    var submittedAt = data.submittedAt || new Date().toLocaleString();
+    var fullName = data.fullName || "Anonymous";
+    var email = data.email || "No email";
+    var phone = data.phone || "No phone";
+    var message = data.message || "No message";
+
+    // 1. Append row to Google Sheet
     sheet.appendRow([
-      data.submittedAt || new Date().toLocaleString(),
-      data.fullName || "",
-      data.email || "",
-      data.message || "",
+      submittedAt,
+      fullName,
+      email,
+      phone,
+      message,
       "Website Lead"
     ]);
+
+    // 2. Send instant Email Notification to you
+    // Change this email if needed or it defaults to the sheet owner:
+    var notifyEmail = Session.getEffectiveUser().getEmail() || "builtbywatson@gmail.com";
+    var subject = "🔥 New Lead Alert: " + fullName + " (" + (phone !== "No phone" ? phone : email) + ")";
+    var body = "You received a new project inquiry from Built By Watson!\n\n" +
+               "👤 Name: " + fullName + "\n" +
+               "✉️ Email: " + email + "\n" +
+               "📞 Phone: " + phone + "\n" +
+               "📅 Time: " + submittedAt + "\n\n" +
+               "💬 Message:\n" + message + "\n\n" +
+               "📊 View Google Sheet:\n" + SpreadsheetApp.getActiveSpreadsheet().getUrl();
+
+    MailApp.sendEmail(notifyEmail, subject, body);
+
     return ContentService.createTextOutput(JSON.stringify({result: "success"})).setMimeType(ContentService.MimeType.JSON);
   } catch(err) {
     return ContentService.createTextOutput(JSON.stringify({result: "error", error: err.toString()})).setMimeType(ContentService.MimeType.JSON);
@@ -887,10 +929,10 @@ export default function ContactView() {
 
                         <ol className="list-decimal pl-4 space-y-1 text-[11px] text-slate-600 leading-snug">
                           <li>Open your Google Sheet &amp; click <strong>Extensions &gt; Apps Script</strong>.</li>
-                          <li>Delete any existing code, paste the script below, and click <strong>Save (💾)</strong>.</li>
-                          <li>Click <strong>Deploy &gt; New deployment</strong>.</li>
+                          <li>Replace the code with the script below (it automatically appends rows with name, email, phone &amp; message <strong>AND</strong> sends an email notification instantly to your inbox via <code>MailApp.sendEmail</code>).</li>
+                          <li>Click <strong>Save (💾)</strong>, then <strong>Deploy &gt; New deployment</strong> (or <em>Manage deployments &gt; Edit &gt; New version</em> if updating).</li>
                           <li>Select Type: <strong>Web app</strong>. Execute as: <strong>Me</strong>. Who has access: <strong>Anyone</strong>.</li>
-                          <li>Click <strong>Deploy</strong>, copy the Web App URL, and paste it into the box above!</li>
+                          <li>Click <strong>Deploy</strong>, grant permission to send email, and paste the Web App URL into the box above!</li>
                         </ol>
 
                         <div className="relative">
@@ -900,13 +942,35 @@ export default function ContactView() {
     var contents = e.postData ? e.postData.contents : "";
     var data = typeof contents === "string" ? JSON.parse(contents) : contents;
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    var submittedAt = data.submittedAt || new Date().toLocaleString();
+    var fullName = data.fullName || "Anonymous";
+    var email = data.email || "No email";
+    var phone = data.phone || "No phone";
+    var message = data.message || "No message";
+
+    // 1. Record row in Google Sheet
     sheet.appendRow([
-      data.submittedAt || new Date().toLocaleString(),
-      data.fullName || "",
-      data.email || "",
-      data.message || "",
+      submittedAt,
+      fullName,
+      email,
+      phone,
+      message,
       "Website Lead"
     ]);
+
+    // 2. Send instant Email Notification to your inbox
+    var notifyEmail = Session.getEffectiveUser().getEmail() || "builtbywatson@gmail.com";
+    var subject = "🔥 New Lead Alert: " + fullName + " (" + (phone !== "No phone" ? phone : email) + ")";
+    var body = "You received a new project inquiry from Built By Watson!\n\n" +
+               "👤 Name: " + fullName + "\n" +
+               "✉️ Email: " + email + "\n" +
+               "📞 Phone: " + phone + "\n" +
+               "📅 Time: " + submittedAt + "\n\n" +
+               "💬 Message:\n" + message + "\n\n" +
+               "📊 View Google Sheet:\n" + SpreadsheetApp.getActiveSpreadsheet().getUrl();
+
+    MailApp.sendEmail(notifyEmail, subject, body);
+
     return ContentService.createTextOutput(JSON.stringify({result: "success"})).setMimeType(ContentService.MimeType.JSON);
   } catch(err) {
     return ContentService.createTextOutput(JSON.stringify({result: "error", error: err.toString()})).setMimeType(ContentService.MimeType.JSON);
@@ -955,6 +1019,7 @@ export default function ContactView() {
                                   await appendLeadToSheet(googleToken, selectedSheetId, {
                                     fullName: inquiry.fullName,
                                     email: inquiry.email,
+                                    phone: inquiry.phone || '',
                                     message: inquiry.message,
                                     submittedAt: inquiry.submittedAt ? new Date(inquiry.submittedAt).toLocaleString() : undefined
                                   });
@@ -995,7 +1060,9 @@ export default function ContactView() {
                                 {inquiry.submittedAt ? new Date(inquiry.submittedAt).toLocaleDateString() : 'N/A'}
                               </span>
                             </div>
-                            <p className="text-secondary select-all text-[9px] font-mono leading-none">{inquiry.email}</p>
+                            <p className="text-secondary select-all text-[9px] font-mono leading-none">
+                              {inquiry.email}{inquiry.phone ? ` • 📞 ${inquiry.phone}` : ''}
+                            </p>
                             <p className="text-slate-600 line-clamp-2 leading-normal mt-1 border-t border-slate-50 pt-1">
                               {inquiry.message}
                             </p>
@@ -1019,6 +1086,7 @@ export default function ContactView() {
                                       await appendLeadToSheet(googleToken, selectedSheetId, {
                                         fullName: inquiry.fullName,
                                         email: inquiry.email,
+                                        phone: inquiry.phone || '',
                                         message: inquiry.message,
                                         submittedAt: inquiry.submittedAt ? new Date(inquiry.submittedAt).toLocaleString() : undefined
                                       });
@@ -1063,7 +1131,9 @@ export default function ContactView() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Full Name field */}
                   <div className="space-y-2">
-                    <label className="text-label-md font-label-md text-primary-fixed block font-medium">Full Name</label>
+                    <label className="text-label-md font-label-md text-primary-fixed block font-medium">
+                      Full Name <span className="text-red-400">*</span>
+                    </label>
                     <input
                       disabled={isSubmitting}
                       className={`w-full bg-white/5 border rounded-lg p-4 text-white text-body-md outline-none transition-all duration-200 placeholder:text-white/20 ${
@@ -1084,7 +1154,9 @@ export default function ContactView() {
 
                   {/* Email field */}
                   <div className="space-y-2">
-                    <label className="text-label-md font-label-md text-primary-fixed block font-medium">Email Address</label>
+                    <label className="text-label-md font-label-md text-primary-fixed block font-medium">
+                      Email Address <span className="text-red-400">*</span>
+                    </label>
                     <input
                       disabled={isSubmitting}
                       className={`w-full bg-white/5 border rounded-lg p-4 text-white text-body-md outline-none transition-all duration-200 placeholder:text-white/20 ${
@@ -1104,9 +1176,34 @@ export default function ContactView() {
                   </div>
                 </div>
 
+                {/* Phone Number field */}
+                <div className="space-y-2">
+                  <label className="text-label-md font-label-md text-primary-fixed block font-medium">
+                    Phone Number <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    disabled={isSubmitting}
+                    className={`w-full bg-white/5 border rounded-lg p-4 text-white text-body-md outline-none transition-all duration-200 placeholder:text-white/20 ${
+                      errors.phone ? 'border-red-400 focus:ring-1 focus:ring-red-400' : 'border-white/10 focus:ring-2 focus:ring-primary-fixed focus:border-primary-fixed'
+                    }`}
+                    placeholder="(555) 000-0000"
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => {
+                      setPhone(e.target.value);
+                      if (errors.phone) setErrors(prev => ({ ...prev, phone: undefined }));
+                    }}
+                  />
+                  {errors.phone && (
+                    <p className="text-xs text-red-300 font-mono italic">{errors.phone}</p>
+                  )}
+                </div>
+
                 {/* Message field */}
                 <div className="space-y-2">
-                  <label className="text-label-md font-label-md text-primary-fixed block font-medium">Message</label>
+                  <label className="text-label-md font-label-md text-primary-fixed block font-medium">
+                    Message <span className="text-red-400">*</span>
+                  </label>
                   <textarea
                     disabled={isSubmitting}
                     className={`w-full bg-white/5 border rounded-lg p-4 text-white text-body-md outline-none transition-all duration-200 placeholder:text-white/20 resize-none ${

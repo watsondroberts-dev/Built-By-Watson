@@ -2,6 +2,7 @@ export interface ProjectInquiry {
   id: string;
   fullName: string;
   email: string;
+  phone?: string;
   message: string;
   submittedAt: string;
   status: 'pending' | 'reviewed' | 'responded';

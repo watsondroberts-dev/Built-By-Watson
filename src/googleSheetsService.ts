@@ -24,6 +24,7 @@ export interface InquiryData {
   id?: string;
   fullName: string;
   email: string;
+  phone?: string;
   message: string;
   submittedAt: string;
   syncedToSheet?: boolean;
@@ -169,9 +170,9 @@ export const createLeadsSheet = async (token: string, title = 'Built By Watson -
     }
 
     // 2. Initialize headers in the first row
-    const headers = [['Submitted At', 'Full Name', 'Email Address', 'Lead Message', 'Campaign Status']];
+    const headers = [['Submitted At', 'Full Name', 'Email Address', 'Phone Number', 'Lead Message', 'Campaign Status']];
     const headerResponse = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Sheet1!A1:E1?valueInputOption=USER_ENTERED`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Sheet1!A1:F1?valueInputOption=USER_ENTERED`,
       {
         method: 'PUT',
         headers: {
@@ -201,17 +202,17 @@ export const createLeadsSheet = async (token: string, title = 'Built By Watson -
 export const appendLeadToSheet = async (
   token: string,
   spreadsheetId: string,
-  lead: { fullName: string; email: string; message: string; submittedAt?: string }
+  lead: { fullName: string; email: string; phone?: string; message: string; submittedAt?: string }
 ): Promise<void> => {
   try {
     const timestamp = lead.submittedAt || new Date().toLocaleString();
     const rowValues = [
-      [timestamp, lead.fullName, lead.email, lead.message, 'Active Campaign']
+      [timestamp, lead.fullName, lead.email, lead.phone || '', lead.message, 'Active Campaign']
     ];
 
     // Append value to sheet. Using Sheet1 as standard, but if it doesn't work, first tab will be appended.
     const response = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/A:E:append?valueInputOption=USER_ENTERED`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/A:F:append?valueInputOption=USER_ENTERED`,
       {
         method: 'POST',
         headers: {
@@ -225,9 +226,9 @@ export const appendLeadToSheet = async (
     );
 
     if (!response.ok) {
-      // Retry specifying 'Sheet1!A:E' if generic 'A:E' append fails
+      // Retry specifying 'Sheet1!A:F' if generic 'A:F' append fails
       const retryResponse = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Sheet1!A:E:append?valueInputOption=USER_ENTERED`,
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Sheet1!A:F:append?valueInputOption=USER_ENTERED`,
         {
           method: 'POST',
           headers: {
@@ -300,11 +301,12 @@ export const getSheetsConfigFromFirestore = async (): Promise<{
 
 export const appendLeadToWebhook = async (
   webhookUrl: string,
-  lead: { fullName: string; email: string; message: string; submittedAt?: string }
+  lead: { fullName: string; email: string; phone?: string; message: string; submittedAt?: string }
 ): Promise<void> => {
   const payload = {
     fullName: lead.fullName,
     email: lead.email,
+    phone: lead.phone || '',
     message: lead.message,
     submittedAt: lead.submittedAt || new Date().toLocaleString()
   };
@@ -338,6 +340,7 @@ export const saveInquiryToFirestore = async (inquiry: InquiryData): Promise<stri
     const docRef = await addDoc(colRef, {
       fullName: inquiry.fullName,
       email: inquiry.email,
+      phone: inquiry.phone || '',
       message: inquiry.message,
       submittedAt: inquiry.submittedAt,
       syncedToSheet: false,
@@ -365,6 +368,7 @@ export const subscribeToInquiries = (callback: (inquiries: InquiryData[]) => voi
         id: doc.id,
         fullName: data.fullName || '',
         email: data.email || '',
+        phone: data.phone || '',
         message: data.message || '',
         submittedAt: data.submittedAt || '',
         syncedToSheet: !!data.syncedToSheet
