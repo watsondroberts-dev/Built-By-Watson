@@ -10,6 +10,7 @@ import {
   fetchUserSpreadsheets, 
   createLeadsSheet, 
   appendLeadToSheet,
+  ensurePhoneColumnInSheet,
   appendLeadToWebhook,
   saveInquiryToFirestore,
   subscribeToInquiries,
@@ -22,6 +23,115 @@ import {
 import { User } from 'firebase/auth';
 
 const DEFAULT_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbwsSqvWMwq5yDgixNTx0KFSo8PbnJKua6Bram94mVYN-6IbwvlTGPPP_faJ-0f8IIQ5/exec';
+
+const APPS_SCRIPT_CODE = `/**
+ * BUILT BY WATSON — LEADS PORTAL GOOGLE APPS SCRIPT
+ * 
+ * Column Alignment:
+ * • Column A: Submitted At (Timestamp)
+ * • Column B: Full Name
+ * • Column C: Email Address
+ * • Column D: Phone Number
+ * • Column E: Lead Message
+ * • Column F: Campaign Status
+ */
+
+// 1. Receives form submissions from the website 24/7
+function doPost(e) {
+  try {
+    var data = {};
+    if (e && e.postData && e.postData.contents) {
+      try {
+        data = JSON.parse(e.postData.contents);
+      } catch (jsonErr) {
+        data = e.parameter || {};
+      }
+    } else if (e && e.parameter) {
+      data = e.parameter;
+    }
+
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+
+    // If row 1 is empty, write standard column headers
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow(["Submitted At", "Full Name", "Email Address", "Phone Number", "Lead Message", "Campaign Status"]);
+      sheet.getRange(1, 1, 1, 6).setFontWeight("bold");
+    }
+
+    var submittedAt = data.submittedAt || data.timestamp || new Date().toLocaleString();
+    var fullName = data.fullName || data.name || "Anonymous";
+    var email = data.email || data.emailAddress || "";
+    var phone = data.phone || data.phoneNumber || data.tel || data.telephone || "";
+    var message = data.message || data.leadMessage || data.notes || "";
+
+    // Append lead matching exact columns:
+    // Col A: submittedAt | Col B: fullName | Col C: email | Col D: phone | Col E: message | Col F: status
+    sheet.appendRow([
+      submittedAt,
+      fullName,
+      email,
+      phone,
+      message,
+      "Website Lead"
+    ]);
+
+    // Send instant Email Notification to the sheet owner
+    var notifyEmail = Session.getEffectiveUser().getEmail() || "Watsondroberts@gmail.com";
+    var subject = "🔥 New Lead Alert: " + fullName + (phone ? " (" + phone + ")" : "");
+    var body = "You received a new project inquiry from Built By Watson!\\n\\n" +
+               "👤 Name: " + fullName + "\\n" +
+               "✉️ Email: " + (email || "Not provided") + "\\n" +
+               "📞 Phone: " + (phone || "Not provided") + "\\n" +
+               "📅 Time: " + submittedAt + "\\n\\n" +
+               "💬 Message:\\n" + message + "\\n\\n" +
+               "📊 View Google Sheet:\\n" + SpreadsheetApp.getActiveSpreadsheet().getUrl();
+
+    MailApp.sendEmail(notifyEmail, subject, body);
+
+    return ContentService.createTextOutput(JSON.stringify({result: "success", status: "logged"}))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch(err) {
+    return ContentService.createTextOutput(JSON.stringify({result: "error", error: err.toString()}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// 2. Health check when opening the Web App URL in a web browser
+function doGet(e) {
+  return ContentService.createTextOutput(
+    "✅ Built By Watson Webhook is active and connected!\\n\\n" +
+    "Columns:\\n" +
+    "• Column A: Submitted At\\n" +
+    "• Column B: Full Name\\n" +
+    "• Column C: Email Address\\n" +
+    "• Column D: Phone Number\\n" +
+    "• Column E: Lead Message\\n" +
+    "• Column F: Campaign Status\\n"
+  ).setMimeType(ContentService.MimeType.TEXT);
+}
+
+// 3. Test Function: Select 'testLeadNow' in the toolbar & click Run!
+function testLeadNow() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var now = new Date().toLocaleString();
+  sheet.appendRow([
+    now,
+    "Test Lead (Watson)",
+    "watsondroberts@gmail.com",
+    "(555) 234-5678",
+    "Testing Column D (Phone) and Column E (Message) alignment",
+    "Verified Lead"
+  ]);
+  SpreadsheetApp.getUi().alert(
+    "🎉 Success!\\n\\nA test row was added to your sheet:\\n" +
+    "• Col A: " + now + "\\n" +
+    "• Col B: Test Lead (Watson)\\n" +
+    "• Col C: watsondroberts@gmail.com\\n" +
+    "• Col D (Phone): (555) 234-5678\\n" +
+    "• Col E (Message): Testing Column D and Column E alignment\\n" +
+    "• Col F: Verified Lead"
+  );
+}`;
 
 export default function ContactView() {
   const [fullName, setFullName] = useState('');
@@ -306,6 +416,22 @@ export default function ContactView() {
     }
   };
 
+  const handleEnsurePhoneColumn = async () => {
+    if (!googleToken || !selectedSheetId) return;
+    setSheetsError(null);
+    setIsLoadingSheets(true);
+    try {
+      const res = await ensurePhoneColumnInSheet(googleToken, selectedSheetId);
+      setLastSyncedLead(res.message);
+      setTimeout(() => setLastSyncedLead(null), 5000);
+    } catch (err: any) {
+      console.error("Failed to verify/add phone column:", err);
+      setSheetsError("Failed to update sheet columns. Please ensure you are logged in with valid spreadsheet permissions.");
+    } finally {
+      setIsLoadingSheets(false);
+    }
+  };
+
   const handleSendTestLead = async () => {
     if (!googleToken || !selectedSheetId) return;
     setSheetsError(null);
@@ -317,7 +443,7 @@ export default function ContactView() {
         phone: "(555) 234-5678",
         message: "This is a verification test lead to verify your Google Sheet is fully linked and active!"
       });
-      setLastSyncedLead("Test lead successfully appended!");
+      setLastSyncedLead("Test lead with Phone Number successfully appended to sheet!");
       setTimeout(() => setLastSyncedLead(null), 4000);
     } catch (err: any) {
       console.error("Test append failed:", err);
@@ -782,17 +908,19 @@ export default function ContactView() {
                           <div className="bg-green-50/70 border border-green-200/50 p-3 rounded-lg space-y-2">
                             <div className="flex items-start gap-2 text-[10px] text-green-800 leading-normal">
                               <Check className="h-3.5 w-3.5 text-green-600 mt-0.5 shrink-0" />
-                              <span>Active Spreadsheet Linked. Columns: <strong>Timestamp, Name, Email, Message, Campaign</strong>.</span>
+                              <span>Active Spreadsheet Linked. Columns: <strong>Submitted At, Full Name, Email Address, Phone Number, Lead Message, Campaign Status</strong>.</span>
                             </div>
-                            <a
-                              href={`https://docs.google.com/spreadsheets/d/${selectedSheetId}/edit`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#34a853] hover:text-[#2b8a43] hover:underline"
-                            >
-                              <ExternalLink className="h-3.5 w-3.5" />
-                              Open Active Google Sheet in New Tab ↗
-                            </a>
+                            <div className="flex items-center gap-3">
+                              <a
+                                href={`https://docs.google.com/spreadsheets/d/${selectedSheetId}/edit`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#34a853] hover:text-[#2b8a43] hover:underline"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                                Open Active Google Sheet in New Tab ↗
+                              </a>
+                            </div>
                           </div>
                         ) : (
                           <p className="text-[10px] text-slate-500 leading-normal">
@@ -801,9 +929,19 @@ export default function ContactView() {
                         )}
                       </div>
 
-                      {/* Verification Test lead append */}
+                      {/* Verification Test lead append & Ensure Phone Column */}
                       {selectedSheetId && (
                         <div className="pt-2 flex flex-col sm:flex-row gap-2">
+                          <button
+                            type="button"
+                            onClick={handleEnsurePhoneColumn}
+                            disabled={isLoadingSheets}
+                            className="flex-1 py-2 bg-blue-50 hover:bg-blue-100 active:bg-blue-200 text-blue-700 font-mono text-[10px] font-bold uppercase tracking-wider rounded transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 border border-blue-200/60"
+                            title="Verifies and automatically adds the 'Phone Number' column to your active spreadsheet"
+                          >
+                            <CheckCircle2 className="h-3 w-3 text-blue-600" />
+                            Add / Verify Phone Column
+                          </button>
                           <button
                             type="button"
                             onClick={handleSendTestLead}
@@ -876,47 +1014,7 @@ export default function ContactView() {
                           <button
                             type="button"
                             onClick={() => {
-                              const code = `function doPost(e) {
-  try {
-    var contents = e.postData ? e.postData.contents : "";
-    var data = typeof contents === "string" ? JSON.parse(contents) : contents;
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-    var submittedAt = data.submittedAt || new Date().toLocaleString();
-    var fullName = data.fullName || "Anonymous";
-    var email = data.email || "No email";
-    var phone = data.phone || "No phone";
-    var message = data.message || "No message";
-
-    // 1. Append row to Google Sheet
-    sheet.appendRow([
-      submittedAt,
-      fullName,
-      email,
-      phone,
-      message,
-      "Website Lead"
-    ]);
-
-    // 2. Send instant Email Notification to you
-    // Change this email if needed or it defaults to the sheet owner:
-    var notifyEmail = Session.getEffectiveUser().getEmail() || "builtbywatson@gmail.com";
-    var subject = "🔥 New Lead Alert: " + fullName + " (" + (phone !== "No phone" ? phone : email) + ")";
-    var body = "You received a new project inquiry from Built By Watson!\n\n" +
-               "👤 Name: " + fullName + "\n" +
-               "✉️ Email: " + email + "\n" +
-               "📞 Phone: " + phone + "\n" +
-               "📅 Time: " + submittedAt + "\n\n" +
-               "💬 Message:\n" + message + "\n\n" +
-               "📊 View Google Sheet:\n" + SpreadsheetApp.getActiveSpreadsheet().getUrl();
-
-    MailApp.sendEmail(notifyEmail, subject, body);
-
-    return ContentService.createTextOutput(JSON.stringify({result: "success"})).setMimeType(ContentService.MimeType.JSON);
-  } catch(err) {
-    return ContentService.createTextOutput(JSON.stringify({result: "error", error: err.toString()})).setMimeType(ContentService.MimeType.JSON);
-  }
-}`;
-                              navigator.clipboard.writeText(code);
+                              navigator.clipboard.writeText(APPS_SCRIPT_CODE);
                               setCopiedScript(true);
                               setTimeout(() => setCopiedScript(false), 3000);
                             }}
@@ -929,53 +1027,16 @@ export default function ContactView() {
 
                         <ol className="list-decimal pl-4 space-y-1 text-[11px] text-slate-600 leading-snug">
                           <li>Open your Google Sheet &amp; click <strong>Extensions &gt; Apps Script</strong>.</li>
-                          <li>Replace the code with the script below (it automatically appends rows with name, email, phone &amp; message <strong>AND</strong> sends an email notification instantly to your inbox via <code>MailApp.sendEmail</code>).</li>
-                          <li>Click <strong>Save (💾)</strong>, then <strong>Deploy &gt; New deployment</strong> (or <em>Manage deployments &gt; Edit &gt; New version</em> if updating).</li>
-                          <li>Select Type: <strong>Web app</strong>. Execute as: <strong>Me</strong>. Who has access: <strong>Anyone</strong>.</li>
-                          <li>Click <strong>Deploy</strong>, grant permission to send email, and paste the Web App URL into the box above!</li>
+                          <li>Replace the code in <strong>Code.gs</strong> with the script below (it maps <strong>Column D = Phone Number</strong>, <strong>Column E = Message</strong>, and sends instant email notifications).</li>
+                          <li>To test immediately inside Google Sheets: select <code>testLeadNow</code> in the toolbar dropdown and click <strong>Run</strong>!</li>
+                          <li>Click <strong>Save (💾)</strong>, then <strong>Deploy &gt; Manage deployments &gt; Edit &gt; New version</strong> (or <em>Deploy &gt; New deployment</em>).</li>
+                          <li>Ensure: Type: <strong>Web app</strong> | Execute as: <strong>Me</strong> | Who has access: <strong>Anyone</strong>.</li>
+                          <li>Click <strong>Deploy</strong>, authorize permissions, and paste the Web App URL into the box above!</li>
                         </ol>
 
                         <div className="relative">
                           <pre className="bg-slate-900 text-slate-100 p-3 rounded-lg text-[9.5px] font-mono overflow-x-auto select-all leading-tight">
-{`function doPost(e) {
-  try {
-    var contents = e.postData ? e.postData.contents : "";
-    var data = typeof contents === "string" ? JSON.parse(contents) : contents;
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-    var submittedAt = data.submittedAt || new Date().toLocaleString();
-    var fullName = data.fullName || "Anonymous";
-    var email = data.email || "No email";
-    var phone = data.phone || "No phone";
-    var message = data.message || "No message";
-
-    // 1. Record row in Google Sheet
-    sheet.appendRow([
-      submittedAt,
-      fullName,
-      email,
-      phone,
-      message,
-      "Website Lead"
-    ]);
-
-    // 2. Send instant Email Notification to your inbox
-    var notifyEmail = Session.getEffectiveUser().getEmail() || "builtbywatson@gmail.com";
-    var subject = "🔥 New Lead Alert: " + fullName + " (" + (phone !== "No phone" ? phone : email) + ")";
-    var body = "You received a new project inquiry from Built By Watson!\n\n" +
-               "👤 Name: " + fullName + "\n" +
-               "✉️ Email: " + email + "\n" +
-               "📞 Phone: " + phone + "\n" +
-               "📅 Time: " + submittedAt + "\n\n" +
-               "💬 Message:\n" + message + "\n\n" +
-               "📊 View Google Sheet:\n" + SpreadsheetApp.getActiveSpreadsheet().getUrl();
-
-    MailApp.sendEmail(notifyEmail, subject, body);
-
-    return ContentService.createTextOutput(JSON.stringify({result: "success"})).setMimeType(ContentService.MimeType.JSON);
-  } catch(err) {
-    return ContentService.createTextOutput(JSON.stringify({result: "error", error: err.toString()})).setMimeType(ContentService.MimeType.JSON);
-  }
-}`}
+{APPS_SCRIPT_CODE}
                           </pre>
                         </div>
                       </div>

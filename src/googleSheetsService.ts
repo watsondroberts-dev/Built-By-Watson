@@ -197,6 +197,171 @@ export const createLeadsSheet = async (token: string, title = 'Built By Watson -
 };
 
 /**
+ * Ensures that the target spreadsheet has the "Phone Number" column in Row 1.
+ * If the sheet has an older structure without Phone Number (e.g. Submitted At, Full Name, Email Address, Lead Message, Campaign Status),
+ * it inserts a new column before Lead Message (Column D) and sets the header to "Phone Number".
+ */
+export const ensurePhoneColumnInSheet = async (
+  token: string,
+  spreadsheetId: string
+): Promise<{ success: boolean; message: string; added: boolean }> => {
+  try {
+    // 1. Fetch spreadsheet metadata to get the first sheet's id & title
+    const metaResponse = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets(properties(sheetId,title))`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+        },
+      }
+    );
+
+    if (!metaResponse.ok) {
+      throw new Error(`Failed to inspect sheet metadata: ${metaResponse.statusText}`);
+    }
+
+    const metaData = await metaResponse.json();
+    const firstSheet = metaData.sheets?.[0]?.properties;
+    const sheetId = firstSheet?.sheetId ?? 0;
+    const sheetTitle = firstSheet?.title || 'Sheet1';
+
+    // 2. Fetch the current header row (Row 1)
+    const headerResponse = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetTitle)}!A1:Z1`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+        },
+      }
+    );
+
+    if (!headerResponse.ok) {
+      throw new Error(`Failed to read sheet headers: ${headerResponse.statusText}`);
+    }
+
+    const headerData = await headerResponse.json();
+    const existingHeaders: string[] = (headerData.values && headerData.values[0]) ? headerData.values[0] : [];
+
+    // Case A: Completely empty sheet - initialize standard headers
+    if (existingHeaders.length === 0) {
+      const fullHeaders = [['Submitted At', 'Full Name', 'Email Address', 'Phone Number', 'Lead Message', 'Campaign Status']];
+      await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetTitle)}!A1:F1?valueInputOption=USER_ENTERED`,
+        {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ values: fullHeaders }),
+        }
+      );
+      return { success: true, message: 'Initialized full column headers with Phone Number (Columns A-F).', added: true };
+    }
+
+    // Check if phone header already exists in row 1
+    const hasPhone = existingHeaders.some(h => {
+      const str = (h || '').toString().toLowerCase();
+      return str.includes('phone') || str.includes('tel') || str.includes('cell') || str.includes('mobile');
+    });
+
+    // Also check if Column D (index 3) is already added by the user and Column E (index 4) is message
+    const colD = (existingHeaders[3] || '').toString().toLowerCase();
+    const colE = (existingHeaders[4] || '').toString().toLowerCase();
+    const isColumnDAlreadyPhone = hasPhone || (colD.length > 0 && (colE.includes('message') || existingHeaders.length >= 5));
+
+    if (isColumnDAlreadyPhone) {
+      return { 
+        success: true, 
+        message: 'Column D (Phone Number) and Column E (Message) verified in your sheet!', 
+        added: false 
+      };
+    }
+
+    // Case B: Sheet has headers, but lacks Phone Number column.
+    // Locate where "message" is, or default to index 3 (Column D, right after Email Address)
+    let insertColIndex = 3;
+    for (let i = 0; i < existingHeaders.length; i++) {
+      if ((existingHeaders[i] || '').toString().toLowerCase().includes('message')) {
+        insertColIndex = i;
+        break;
+      }
+    }
+
+    // Insert column dimension in Google Sheet so existing row values shift right cleanly
+    const batchUpdateResponse = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          requests: [
+            {
+              insertDimension: {
+                range: {
+                  sheetId: sheetId,
+                  dimension: 'COLUMNS',
+                  startIndex: insertColIndex,
+                  endIndex: insertColIndex + 1,
+                },
+                inheritFromBefore: true,
+              },
+            },
+          ],
+        }),
+      }
+    );
+
+    // Convert column index to A1 notation letter (0 -> A, 1 -> B, etc.)
+    const colLetter = String.fromCharCode(65 + insertColIndex);
+
+    if (batchUpdateResponse.ok) {
+      // Set header label in the newly inserted column cell
+      await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetTitle)}!${colLetter}1?valueInputOption=USER_ENTERED`,
+        {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ values: [['Phone Number']] }),
+        }
+      );
+    } else {
+      // Fallback: If insertDimension was rejected, update Row 1 headers array directly
+      const updatedHeaders = [...existingHeaders];
+      updatedHeaders.splice(insertColIndex, 0, 'Phone Number');
+      await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetTitle)}!A1:Z1?valueInputOption=USER_ENTERED`,
+        {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ values: [updatedHeaders] }),
+        }
+      );
+    }
+
+    return {
+      success: true,
+      message: `Phone Number column successfully added at Column ${colLetter}!`,
+      added: true,
+    };
+  } catch (error: any) {
+    console.error('Error ensuring phone column:', error);
+    throw error;
+  }
+};
+
+/**
  * Appends a log row to an active spreadsheet.
  */
 export const appendLeadToSheet = async (
@@ -205,6 +370,13 @@ export const appendLeadToSheet = async (
   lead: { fullName: string; email: string; phone?: string; message: string; submittedAt?: string }
 ): Promise<void> => {
   try {
+    // Ensure the sheet has the Phone Number column before appending
+    try {
+      await ensurePhoneColumnInSheet(token, spreadsheetId);
+    } catch (checkErr) {
+      console.warn('Could not auto-verify phone header, proceeding with append:', checkErr);
+    }
+
     const timestamp = lead.submittedAt || new Date().toLocaleString();
     const rowValues = [
       [timestamp, lead.fullName, lead.email, lead.phone || '', lead.message, 'Active Campaign']
