@@ -105,9 +105,9 @@ export default function HomeView({ setTab }: HomeViewProps) {
           {/* Section Header */}
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end mb-16 border-b border-outline-variant/30 pb-8 gap-4">
             <div>
-              <span className="font-mono text-xs uppercase text-[#4c8dff] font-bold tracking-widest block mb-2">Live Examples</span>
+              <span className="font-mono text-xs uppercase text-[#4c8dff] font-bold tracking-widest block mb-2">SEE WHAT'S POSSIBLE</span>
               <h2 className="font-display-lg text-headline-lg lg:text-3xl font-bold uppercase tracking-tighter text-primary">
-                Google Search Ad Showcase
+                GOOGLE SEARCH ADS
               </h2>
             </div>
 
