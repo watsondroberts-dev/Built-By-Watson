@@ -12,21 +12,21 @@ export const SEO_PAGE_CONFIGS: Record<'home' | 'about' | 'contact', SeoConfig> =
   home: {
     title: 'Built By Watson | Google Ads Management Company for Contractors & B2B',
     description: 'Built By Watson is a dedicated Google Ads management company engineering high-converting PPC search campaigns and qualified lead funnels for contractors & B2B trades.',
-    canonicalUrl: 'https://builtbywatson.com/',
+    canonicalUrl: 'https://www.builtbywatson.com/',
     keywords: 'Built By Watson, Google Ads management company near me, Google Ads agency, contractor Google Ads, B2B PPC marketing, pay-per-click management company, local lead generation',
     ogType: 'website'
   },
   about: {
     title: 'About Built By Watson | B2B & Contractor Google Ads Agency',
     description: 'Learn about Built By Watson: transparent, ROI-driven Google Ads management built specifically to help home service contractors and B2B businesses scale profitable leads.',
-    canonicalUrl: 'https://builtbywatson.com/#about',
+    canonicalUrl: 'https://www.builtbywatson.com/',
     keywords: 'about Built By Watson, Google Ads specialist Delray Beach, contractor PPC agency, B2B Google Ads consultants, PPC campaign management',
     ogType: 'website'
   },
   contact: {
     title: 'Contact Built By Watson | Partner With a Top Google Ads Company',
     description: 'Contact Built By Watson to schedule a 1-on-1 Google Ads strategy consultation. Partner with our dedicated PPC team to dominate your local market and grow inbound leads.',
-    canonicalUrl: 'https://builtbywatson.com/#contact',
+    canonicalUrl: 'https://www.builtbywatson.com/',
     keywords: 'contact Built By Watson, hire Google Ads management company, contractor PPC audit, Google Ads management near me, B2B lead generation consultation',
     ogType: 'website'
   }
